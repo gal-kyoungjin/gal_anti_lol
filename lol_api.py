@@ -34,7 +34,13 @@ class Gallol:
         url = f"https://asia.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{encodedName}/{user_tagline}?api_key={self.api_key}"
         player_id = requests.get(url, headers=self.request_headers).json()
        
-        return player_id['puuid']
+        response = requests.get(url, headers=self.request_headers)
+        
+        if response.status_code == 200:
+            player_id = response.json()
+            return player_id.get('puuid')
+        else:
+            return None  # API 호출 실패 시 None 반환
     
     def init_uuid(self):
 
@@ -55,7 +61,60 @@ class Gallol:
     
         # JSON 파일 업데이트
         GalJasons.dict_to_json(self.user_list, GalTokens.user_list_path)
+        
+    def add_user(self, nickname, tagline):
+        # 이미 존재하는 사용자인지 확인
+        for user in self.user_list['users']:
+            if user['nickname'] == nickname and user['tagLine'] == tagline:
+                print(f"사용자 '{nickname}#{tagline}'는 이미 존재합니다.")
+                return
 
+        # 새 사용자의 UUID 가져오기
+        new_puuid = self.get_uuid(nickname, tagline)
+        
+        if new_puuid is None:
+            return f"사용자 '{nickname}#{tagline}'의 UUID를 가져오는 데 실패했습니다. 닉네임과 태그라인을 확인해주세요."
+        
+        # 새 사용자의 마지막 매치 ID 가져오기
+        new_last_match_id = self.get_last_match(new_puuid)
+        
+        # 새 사용자 정보 생성
+        new_user = {
+            "nickname": nickname,
+            "tagLine": tagline,
+            "puuid": new_puuid,
+            "last_match_id": new_last_match_id
+        }
+        
+        # user_list에 새 사용자 추가
+        self.user_list['users'].append(new_user)
+        self.user_list['user_count'] += 1
+        
+        # JSON 파일 업데이트
+        GalJasons.dict_to_json(self.user_list, GalTokens.user_list_path)
+        
+        return f"사용자 '{nickname}#{tagline}'가 성공적으로 추가되었습니다."
+
+    def delete_user(self, nickname, tagline):
+        # 삭제할 사용자 찾기
+        user_to_delete = None
+        for user in self.user_list['users']:
+            if user['nickname'] == nickname and user['tagLine'] == tagline:
+                user_to_delete = user
+                break
+        
+        if user_to_delete:
+            # 사용자 제거
+            self.user_list['users'].remove(user_to_delete)
+            self.user_list['user_count'] -= 1
+            
+            # JSON 파일 업데이트
+            GalJasons.dict_to_json(self.user_list, GalTokens.user_list_path)
+            
+            return f"사용자 '{nickname}#{tagline}'가 성공적으로 삭제되었습니다."
+        else:
+            return f"사용자 '{nickname}#{tagline}'를 찾을 수 없습니다."
+    
     async def update_last_match(self):
         alarm_list = [0] * self.user_list['user_count']
         
